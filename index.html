@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Expense Tracker</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#4f46e5">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mu:#6b7280;--bd:#e3e6ea;--ac:#4f46e5;--gr:#15803d;--rd:#b91c1c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111317;--card:#1b1e24;--tx:#eceef1;--mu:#9aa1ac;--bd:#2c3038;--ac:#8b85ff;--gr:#4ade80;--rd:#f87171}}
+:root[data-theme="dark"]{--bg:#111317;--card:#1b1e24;--tx:#eceef1;--mu:#9aa1ac;--bd:#2c3038;--ac:#8b85ff;--gr:#4ade80;--rd:#f87171}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:14px}
+h1{font-size:20px;margin:4px 0 12px}h2{font-size:16px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.bal{border:1px solid var(--bd);border-radius:12px;padding:10px}
+.bal small,.mu{color:var(--mu);font-size:12px}.bal b{display:block;font-size:20px}
+.tot{font-size:26px;font-weight:700}
+input,select,button{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:10px;width:100%}
+button{cursor:pointer;background:var(--ac);color:#fff;border:0;font-weight:600}
+button.g{background:transparent;color:var(--mu);border:1px solid var(--bd);padding:4px 8px;width:auto;font-size:12px;font-weight:400}
+.row{display:flex;gap:8px;margin-bottom:8px}.row>*{flex:1;min-width:0}
+.seg{display:flex;gap:6px;margin-bottom:8px}.seg label{flex:1;text-align:center;border:1px solid var(--bd);border-radius:10px;padding:8px;cursor:pointer}
+.seg input{display:none}.seg label.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.day{border-top:1px solid var(--bd);padding-top:10px;margin-top:10px}
+.dh{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.e{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--bd)}
+.e:last-child{border:0}.out{color:var(--rd)}.in{color:var(--gr)}
+.pill{font-size:11px;border:1px solid var(--bd);border-radius:20px;padding:1px 7px;color:var(--mu);margin-left:4px}
+.tabs{display:flex;gap:6px;margin-bottom:10px}.tabs button{background:var(--bg);color:var(--tx);border:1px solid var(--bd)}.tabs button.on{background:var(--ac);color:#fff}
+.done{opacity:.5;text-decoration:line-through}
+.wrap{overflow-x:auto}
+</style></head><body><main>
+<h1>💰 Expense Tracker</h1>
+<div id="app"></div>
+</main>
+<script>
+var S={open:{upi:0,cash:0},tx:[],debts:[]};
+var UI={kind:'out',mode:'upi',dir:'owed',tab:'log'};
+var store=null,saveT=null,ready=false;
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function inr(n){var s=n<0?'-':'';return s+'₹'+Math.abs(n).toLocaleString('en-IN',{maximumFractionDigits:2})}
+function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function fmtDate(d){var t=new Date(d+'T00:00:00');return t.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short',year:'numeric'})}
+function save(){
+  try{localStorage.setItem('exp_tracker',JSON.stringify(S))}catch(e){}
+  if(!store)return;clearTimeout(saveT);
+  saveT=setTimeout(function(){store.set({s:JSON.stringify(S)}).catch(function(){})},400);
+}
+function balances(){
+  var b={upi:+S.open.upi||0,cash:+S.open.cash||0};
+  S.tx.forEach(function(t){b[t.mode]+=(t.kind==='in'?1:-1)*t.amt});
+  return b;
+}
+function render(){
+  var b=balances(),owedMe=0,iOwe=0;
+  S.debts.forEach(function(d){if(!d.done){if(d.dir==='owed')owedMe+=d.amt;else iOwe+=d.amt}});
+  var h='<div class="card"><div class="mu">Total balance</div><div class="tot">'+inr(b.upi+b.cash)+'</div>'
+   +'<div class="grid" style="margin-top:10px"><div class="bal"><small>UPI</small><b>'+inr(b.upi)+'</b></div><div class="bal"><small>Cash</small><b>'+inr(b.cash)+'</b></div></div>'
+   +'<div class="grid" style="margin-top:10px"><div class="bal"><small>People owe me</small><b class="in">'+inr(owedMe)+'</b></div><div class="bal"><small>I owe</small><b class="out">'+inr(iOwe)+'</b></div></div></div>';
+  h+='<div class="tabs"><button class="'+(UI.tab==='log'?'on':'')+'" data-tab="log">Daily log</button><button class="'+(UI.tab==='debts'?'on':'')+'" data-tab="debts">Owed / Owe</button><button class="'+(UI.tab==='set'?'on':'')+'" data-tab="set">Opening</button></div>';
+  h+=UI.tab==='log'?logView():UI.tab==='debts'?debtView():setView();
+  document.getElementById('app').innerHTML=h;
+}
+function setView(){
+  return '<div class="card"><h2>Opening balance</h2><p class="mu">Money you already had before you started tracking.</p><div class="row"><div><small class="mu">UPI (₹)</small><input id="oU" type="number" inputmode="decimal" value="'+(S.open.upi||'')+'"></div><div><small class="mu">Cash (₹)</small><input id="oC" type="number" inputmode="decimal" value="'+(S.open.cash||'')+'"></div></div><button data-act="saveopen">Save</button></div><div class="card"><h2>Backup</h2><p class="mu">Data is stored only on this device. Export a backup now and then.</p><div class="row"><button data-act="exp">Export backup</button><button data-act="imp">Import backup</button></div><input id="impf" type="file" accept=".json" style="display:none"></div>';
+}
+function logView(){
+  var h='<div class="card"><h2>Add entry</h2><div class="seg" data-grp="kind"><label class="'+(UI.kind==='out'?'on':'')+'"><input type="radio">Spent</label><label class="'+(UI.kind==='in'?'on':'')+'"><input type="radio">Received</label></div>'
+   +'<div class="seg" data-grp="mode"><label class="'+(UI.mode==='upi'?'on':'')+'"><input type="radio">UPI</label><label class="'+(UI.mode==='cash'?'on':'')+'"><input type="radio">Cash</label></div>'
+   +'<div class="row"><input id="tA" type="number" inputmode="decimal" placeholder="Amount ₹"><input id="tD" type="date" value="'+today()+'"></div>'
+   +'<div class="row"><input id="tR" placeholder="Reason (bus ticket, train ticket, food...)"></div><button data-act="addtx">Add entry</button></div>';
+  var days={};S.tx.forEach(function(t){(days[t.date]=days[t.date]||[]).push(t)});
+  var dates=Object.keys(days).sort();
+  var run={upi:+S.open.upi||0,cash:+S.open.cash||0},info={};
+  dates.forEach(function(d){
+    var sp={upi:0,cash:0},inc={upi:0,cash:0};
+    days[d].forEach(function(t){if(t.kind==='out'){sp[t.mode]+=t.amt;run[t.mode]-=t.amt}else{inc[t.mode]+=t.amt;run[t.mode]+=t.amt}});
+    info[d]={sp:sp,inc:inc,close:{upi:run.upi,cash:run.cash}};
+  });
+  h+='<div class="card"><h2>Day by day</h2>';
+  if(!dates.length)h+='<p class="mu">No entries yet.</p>';
+  dates.slice().reverse().forEach(function(d){
+    var i=info[d],spent=i.sp.upi+i.sp.cash,got=i.inc.upi+i.inc.cash,net=got-spent;
+    h+='<div class="day"><div class="dh"><b>'+fmtDate(d)+'</b><span class="'+(net<0?'out':'in')+'">'+(net<0?'▼ ':'▲ ')+inr(net)+'</span></div>'
+     +'<div class="mu">Spent '+inr(spent)+' (UPI '+inr(i.sp.upi)+' · Cash '+inr(i.sp.cash)+')'+(got?' · Received '+inr(got):'')+'</div>';
+    days[d].forEach(function(t){
+      h+='<div class="e"><span>'+esc(t.reason||'-')+'<span class="pill">'+(t.mode==='upi'?'UPI':'Cash')+'</span></span><span><b class="'+(t.kind==='in'?'in':'out')+'">'+(t.kind==='in'?'+':'-')+inr(t.amt)+'</b> <button class="g" data-del="'+t.id+'">✕</button></span></div>';
+    });
+    h+='<div class="mu" style="margin-top:6px">Balance end of day: <b>'+inr(i.close.upi+i.close.cash)+'</b> (UPI '+inr(i.close.upi)+' · Cash '+inr(i.close.cash)+')</div></div>';
+  });
+  return h+'</div>';
+}
+function debtView(){
+  var h='<div class="card"><h2>Add</h2><div class="seg" data-grp="dir"><label class="'+(UI.dir==='owed'?'on':'')+'"><input type="radio">They owe me</label><label class="'+(UI.dir==='owe'?'on':'')+'"><input type="radio">I owe them</label></div>'
+   +'<div class="row"><input id="dP" placeholder="Person name"><input id="dA" type="number" inputmode="decimal" placeholder="Amount ₹"></div>'
+   +'<div class="row"><input id="dN" placeholder="Note (optional)"></div><button data-act="adddebt">Add</button></div>';
+  [['owed','People owe me','in'],['owe','I owe','out']].forEach(function(g){
+    var l=S.debts.filter(function(d){return d.dir===g[0]});
+    h+='<div class="card"><h2>'+g[1]+'</h2>';
+    if(!l.length)h+='<p class="mu">Nothing here.</p>';
+    l.forEach(function(d){
+      h+='<div class="e"><span class="'+(d.done?'done':'')+'"><b>'+esc(d.person)+'</b>'+(d.note?'<br><span class="mu">'+esc(d.note)+'</span>':'')+'</span><span><b class="'+g[2]+(d.done?' done':'')+'">'+inr(d.amt)+'</b> <button class="g" data-done="'+d.id+'">'+(d.done?'Undo':'Settled')+'</button> <button class="g" data-deld="'+d.id+'">✕</button></span></div>';
+    });
+    h+='</div>';
+  });
+  return h;
+}
+document.getElementById('app').addEventListener('click',function(e){
+  var el=e.target.closest('[data-tab],[data-act],[data-del],[data-done],[data-deld],.seg label');if(!el)return;
+  if(el.dataset.tab){UI.tab=el.dataset.tab;render();return}
+  if(el.tagName==='LABEL'){UI[el.parentNode.dataset.grp]=Array.prototype.indexOf.call(el.parentNode.children,el)===0?(el.parentNode.dataset.grp==='kind'?'out':el.parentNode.dataset.grp==='mode'?'upi':'owed'):(el.parentNode.dataset.grp==='kind'?'in':el.parentNode.dataset.grp==='mode'?'cash':'owe');
+    var keep={};['tA','tD','tR','dP','dA','dN'].forEach(function(i){var x=document.getElementById(i);if(x)keep[i]=x.value});
+    render();for(var k in keep){var y=document.getElementById(k);if(y)y.value=keep[k]}return}
+  var a=el.dataset.act;
+  if(a==='exp'){var bl=new Blob([JSON.stringify(S)],{type:'application/json'}),u=URL.createObjectURL(bl),l=document.createElement('a');l.href=u;l.download='expense-backup-'+today()+'.json';l.click();setTimeout(function(){URL.revokeObjectURL(u)},1000)}
+  if(a==='imp'){document.getElementById('impf').click()}
+  if(a==='saveopen'){S.open.upi=+document.getElementById('oU').value||0;S.open.cash=+document.getElementById('oC').value||0;save();UI.tab='log';render()}
+  if(a==='addtx'){var amt=+document.getElementById('tA').value;if(!(amt>0)){document.getElementById('tA').focus();return}
+    S.tx.push({id:uid(),date:document.getElementById('tD').value||today(),kind:UI.kind,mode:UI.mode,amt:amt,reason:document.getElementById('tR').value.trim()});save();render()}
+  if(a==='adddebt'){var p=document.getElementById('dP').value.trim(),m=+document.getElementById('dA').value;if(!p||!(m>0))return;
+    S.debts.push({id:uid(),dir:UI.dir,person:p,amt:m,note:document.getElementById('dN').value.trim(),done:false});save();render()}
+  if(el.dataset.del){S.tx=S.tx.filter(function(t){return t.id!==el.dataset.del});save();render()}
+  if(el.dataset.deld){S.debts=S.debts.filter(function(t){return t.id!==el.dataset.deld});save();render()}
+  if(el.dataset.done){S.debts.forEach(function(t){if(t.id===el.dataset.done)t.done=!t.done});save();render()}
+});
+function adopt(o){if(o&&o.tx&&o.debts&&o.open)S=o}
+document.getElementById('app').addEventListener('change',function(e){
+  if(e.target.id!=='impf'||!e.target.files[0])return;
+  var r=new FileReader();r.onload=function(){try{var o=JSON.parse(r.result);if(o&&o.tx&&o.debts&&o.open){S=o;save();UI.tab='log';render()}else alert('Not a valid backup file')}catch(x){alert('Not a valid backup file')}};r.readAsText(e.target.files[0]);
+});
+if('serviceWorker' in navigator&&location.protocol.indexOf('http')===0){navigator.serviceWorker.register('sw.js').catch(function(){})}
+render();
+(async function(){
+  try{
+    if(typeof claude==='undefined')throw 0;var db=await claude.use('db'),user=await claude.use('user');
+    if(db&&user){
+      var id=await user.id();
+      store=db.doc('data/users/'+id+'/tracker/main');
+      var snap=await store.get();
+      if(snap.exists){try{adopt(JSON.parse(snap.data().s))}catch(e){}}
+      else{try{adopt(JSON.parse(localStorage.getItem('exp_tracker')))}catch(e){}; if(S.tx.length||S.debts.length)save()}
+      render();return;
+    }
+  }catch(e){}
+  try{adopt(JSON.parse(localStorage.getItem('exp_tracker')));render()}catch(e){}
+})();
+</script></body></html>
